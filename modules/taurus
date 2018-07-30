@@ -1,0 +1,33 @@
+[credential]
+        cache = cache --timeout=3600 --socket /.git-credential-cache-socket
+
+[alias]
+    co = checkout
+    st = status
+    ds = diff --staged
+    ci = commit -a
+    cam = commit -am
+    mg = merge
+    br = branch
+    dt = difftool
+    mt = mergetool
+    last = log -1 HEAD
+    latest = for-each-ref --sort=-committerdate --format=\"%(committername)@%(refname:short) [%(committerdate:short)] %(contents)\"
+    ls = log --pretty=format:\"%C(yellow)%h %C(blue)%ad %C(red)%d %C(reset)%s %C(green)[%cn]\" --decorate --date=short
+    hist = log --pretty=format:\"%C(yellow)%h %C(red)%d %C(reset)%s %C(green)[%an] %C(blue)%ad\" --topo-order --graph --date=short
+    type = cat-file -t
+    dump = cat-file -p
+    addmo = ls-files --modified | xargs git add
+    addut = ls-files --others --exclude-standard | xargs git add
+
+[color]
+  diff = auto
+  status = auto
+  branch = auto
+  interactive = auto
+  ui = true
+  pager = true
+
+[user]
+	name = jyx13
+	email = xiao.jordan@berkeley.edu
