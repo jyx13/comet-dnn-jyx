@@ -11,7 +11,7 @@
 --model_dir=/Users/Jyx/Desktop/train_test_dir
 --log_dev_place=False
 --summary_frequency=1
---num_checkpoints_steps=5
+--num_checkpoints_steps=1
 --num_fc_nodes=96
 --weight_stddev=5e-2
 --weight_decay=5e-3

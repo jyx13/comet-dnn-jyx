@@ -36,7 +36,7 @@ tf.app.flags.DEFINE_boolean('eval_test', True,
                            """If true, evaluates the testing data""")
 tf.app.flags.DEFINE_string('checkpoint_dir', '/Users/Jyx/Desktop/train_test_dir/train/',
                            """Directory where to read model checkpoints.""")
-tf.app.flags.DEFINE_string('saved_model_dir', '/Users/Jyx/Desktop/train_test_dir/SavedModel_test/',
+tf.app.flags.DEFINE_string('saved_model_dir', '/Users/Jyx/Desktop/train_test_dir/SavedModel/',
                            """Directory where to read saved model.""")
 tf.app.flags.DEFINE_integer('eval_interval_secs', 60 * 5,
                             """How often to run the eval.""")
@@ -104,10 +104,9 @@ def eval_once(saver, summary_writer, batch_predictions, batch_labels, summary_op
 
 def evaluate(eval_files): # function to improve and get working
 
-    # TODO: make these inputs into passable parameters (flags?)
     ckpt_num = "0" # string (for filepath concat)
 
-    # for Saver # '/Users/Jyx/Desktop/comet_stuff/20180730/00000003/train/model.ckpt-38887'
+    # for Saver
     ckpt_name = FLAGS.checkpoint_dir + 'model-ckpt-' + ckpt_num # full path to checkpoint PREFIX (no file extensions)  
     meta_file = ckpt_name + '.meta' # full filepath to meta file
 
@@ -115,13 +114,6 @@ def evaluate(eval_files): # function to improve and get working
     model_dir = FLAGS.saved_model_dir + 'step_' + ckpt_num # full path to directory where SavedModel is stored
 
     with tf.Graph().as_default():
-
-        # Make placeholders
-#        image_shape = [FLAGS.batch_size] + comet_dnn_input.IMAGE_SHAPE
-#        batch_images = tf.placeholder(tf.float32, shape=image_shape, name="input_images")
-#        label_shape = [FLAGS.batch_size] + comet_dnn_input.LABEL_SHAPE
-#        batch_labels = tf.placeholder(tf.float32, shape=label_shape, name="input_labels")
-    
         # Extracting data
         pred_data = comet_dnn_input.read_tfrecord_to_dataset(
             eval_files,
@@ -132,12 +124,6 @@ def evaluate(eval_files): # function to improve and get working
             seed=FLAGS.random_seed)
         pred_iter = pred_data.make_one_shot_iterator()
         pred_images, true_labels = pred_iter.get_next()
-
-
-#        predictions = comet_dnn.inference(batch_images)    
-
-        # Loss operation, currently not actually called
-#        loss = comet_dnn.loss(predictions, batch_labels)
         
         init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
         
@@ -147,47 +133,37 @@ def evaluate(eval_files): # function to improve and get working
             sess.run(init_op)
 
             # Restore model, using Saver
-            print("Restoring checkpoint:" + ckpt_name)
-            saver = tf.train.import_meta_graph(meta_file)
-            saver.restore(sess, ckpt_name)
+#            print("Restoring checkpoint:" + ckpt_name)
+#            saver = tf.train.import_meta_graph(meta_file)
+#            saver.restore(sess, ckpt_name)
 
             # Restore model, using SavedModel
-#            print("Reloaded model path:"+model_dir)
-#            tf.saved_model.loader.load(sess, ["test_tag"], model_dir)            
+            print("Reloaded model path:"+model_dir)
+            tf.saved_model.loader.load(sess, ["test_tag"], model_dir)            
 
-            # Initializing new predictions operation (creates duplicates of 10 variables)
-            # predictions = comet_dnn.inference(batch_images) # REMEMBER TO COMMENT OUT THE ONE OUTSIDE SESSION TOO
-
-            # Using reloaded predictions operation instead
+            # Reloading predictions operation and corresponding placeholder variable
             graph = tf.get_default_graph()
             predictions = graph.get_tensor_by_name("predictions/predictions:0")
             batch_images = graph.get_tensor_by_name("input_images:0")
 
-            test_tensor_to_print = "predictions/weights"
+            tensor_to_print = "predictions/weights" # if want to print individual tensor from graph
 
-            print("Printing tensors in checkpoint file:")
-            print_tensors_in_checkpoint_file(file_name=ckpt_name,
-                                             tensor_name=test_tensor_to_print,
-                                             all_tensors="",
-                                             all_tensor_names="") # outputs 47 tensors
+#            print("Printing tensors in checkpoint file:")
+#            print_tensors_in_checkpoint_file(file_name=ckpt_name,
+#                                             tensor_name=tensor_to_print,
+#                                             all_tensors="",
+#                                             all_tensor_names="") # outputs 47 tensors
 
-
-            print(np.shape(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)))
+#            print(np.shape(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)))
 #            for tensor in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
 #                print(tensor.name)
-            print(graph.get_tensor_by_name(test_tensor_to_print+":0"))
-            print(graph.get_tensor_by_name(test_tensor_to_print+":0").eval())
-
+#            print(graph.get_tensor_by_name(tensor_to_print+":0"))
+#            print(graph.get_tensor_by_name(tensor_to_print+":0").eval())
 
 #            for op in graph.get_operations():
 #                print(op.name)
 #                print(op)
 #            print(graph.get_tensor_by_name("predictions/predictions:0"))
-
-            # THINGS TO TRY: (no particular order)
-            # 1.5 try using saved/reloaded predictions op?
-
-            # return  # so i don't get error when predictions op isn't initialized
 
             # Make feed_dict and run predictions operation
             print("Running predictions operation...")
@@ -195,12 +171,8 @@ def evaluate(eval_files): # function to improve and get working
             output = sess.run(predictions,feed_dict = pred_feed)
             predicted_labels = output[:,FLAGS.num_classes-1]
 
-#            output2 = sess.run(reloaded_predictions_op, pred_feed)
-#            predicted_labels2 = output2[:,0]
-    
             print("Predictions:",predicted_labels)
             print("Predictions size:",predicted_labels.shape)
-#            print("Predictions2:",predicted_labels2)
             
             all_true_labels = true_labels.eval() # turn true_labels tensor into array
             true_labels = all_true_labels[:,FLAGS.num_classes-1] # only take columns we bothered predicting for
@@ -257,9 +229,6 @@ def evaluate(eval_files): # function to improve and get working
     
             plt.show(block = True) # change to true if want to see plots
 
-            # FUNCTIONS TO TRY:
-            # tf.print_tensors_in_checkpoint_file
-      
 """
     # Restore the moving average version of the learned variables for eval.
     variable_averages = tf.train.ExponentialMovingAverage(

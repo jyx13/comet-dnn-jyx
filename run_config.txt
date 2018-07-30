@@ -6,7 +6,7 @@
 --l_rate_decay=0.8
 --n_epochs_decay=5.0
 --move_avg_decay=0.9999
---batch_size=512
+--batch_size=32
 --num_classes=1
 --model_dir=/Users/Jyx/Desktop/train_test_dir
 --log_dev_place=False
