@@ -177,7 +177,7 @@ def train_test_split_filenames(filelist_path,
     total_n_files = list_filenames.size
     last_train_file = int(total_n_files * percent_train)
     training_files = list_filenames[0:last_train_file]
-    # Grabe the next percentage as testing files
+    # Grab the next percentage as testing files
     last_test_file = last_train_file + int(total_n_files * percent_test)
     testing_files = list_filenames[last_train_file:last_test_file]
     # Ensure we have not asked for too few files
@@ -206,12 +206,14 @@ def parse_record_into_tensors(record):
                              name="label_norms")
     all_labels_normed = tf.div(all_labels, label_norm)
     return image, all_labels_normed
+    #return image, all_labels
 
 def read_tfrecord_to_dataset(filenames,
                              compression="GZIP",
                              buffer_size=0,
                              batch_size=256,
-                             epochs=1):
+                             epochs=1,
+                             seed=None):
     """
     Reads a list of TFRecords into a TFRecordDataset, and returns the Dataset
     iterators that yield (images, labels) pairs.  This function configures the
@@ -233,24 +235,22 @@ def read_tfrecord_to_dataset(filenames,
 
     Returns
     -------
-    images, labels: Tensor, Tensor
-        Images of each event are [batch_size, 18, 300]
-        Labels are [batch_size, 9]
+    tf_dataset: tensorflow dataset object, from which images and labels can be extracted
     """
     # Open a variable scope for the input data
     with tf.variable_scope('input_data') as _:
-        # Get a tensor of all files and suffle it
+        # Get a tensor of all files and shuffle it
         in_files = tf.convert_to_tensor(filenames)
         in_files = tf.data.Dataset.from_tensor_slices(in_files)
-        in_files = in_files.shuffle(len(filenames))
+        in_files = in_files.shuffle(len(filenames), seed=seed)
         # Initialize the tf.dataset from the input filenames of the tfrecords
         tf_dataset = tf.data.TFRecordDataset(in_files,
                                              compression_type=compression,
                                              buffer_size=int(buffer_size))
-        # Parse the tfrecord into the tesnor values
+        # Parse the tfrecord into the tensor values
         tf_dataset = tf_dataset.map(parse_record_into_tensors)
         # Shuffle the dataset
-        tf_dataset = tf_dataset.shuffle(buffer_size=EXAMPLES_PER_FILE)
+        tf_dataset = tf_dataset.shuffle(buffer_size=EXAMPLES_PER_FILE, seed=seed)
         # Repeat the dataset for a given number of epochs
         tf_dataset = tf_dataset.repeat(epochs)
         # Set the batch size and ignore the last few elements

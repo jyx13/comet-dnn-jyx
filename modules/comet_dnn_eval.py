@@ -1,5 +1,5 @@
 # These scripts are based on the example of TensorFlow CIFAR-10
-# They use the Apache lisence.  We will use the same.
+# They use the Apache license.  We will use the same.
 #     http://www.apache.org/licenses/LICENSE-2.0
 # ==============================================================================
 # TODO get this file working
@@ -21,6 +21,7 @@ import math
 import time
 
 import numpy as np
+import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 
@@ -33,8 +34,10 @@ tf.app.flags.DEFINE_string('eval_dir', '/tmp/comet_dnn_eval',
                            """Directory where to write event logs.""")
 tf.app.flags.DEFINE_boolean('eval_test', True,
                            """If true, evaluates the testing data""")
-tf.app.flags.DEFINE_string('checkpoint_dir', '/tmp/comet_dnn_train',
+tf.app.flags.DEFINE_string('checkpoint_dir', '/Users/Jyx/Desktop/train_test_dir/train/',
                            """Directory where to read model checkpoints.""")
+tf.app.flags.DEFINE_string('saved_model_dir', '/Users/Jyx/Desktop/train_test_dir/SavedModel_test/',
+                           """Directory where to read saved model.""")
 tf.app.flags.DEFINE_integer('eval_interval_secs', 60 * 5,
                             """How often to run the eval.""")
 tf.app.flags.DEFINE_integer('num_examples', 10000,
@@ -42,7 +45,7 @@ tf.app.flags.DEFINE_integer('num_examples', 10000,
 tf.app.flags.DEFINE_boolean('run_once', False,
                             """Whether to run eval only once.""")
 
-def eval_once(saver, summary_writer, batch_predictions, batch_labels, summary_op):
+def eval_once(saver, summary_writer, batch_predictions, batch_labels, summary_op): # not currently in use
     """Run Eval once.
     Args:
     saver: Saver.
@@ -99,31 +102,171 @@ def eval_once(saver, summary_writer, batch_predictions, batch_labels, summary_op
             return
 
 
-def evaluate(eval_files):
-    """Eval comet_dnn for a number of steps."""
-    #with tf.Graph().as_default() as grph:
-    # Get batch_images and batch_labels for comet_dnn.
-    tf.reset_default_graph()
+def evaluate(eval_files): # function to improve and get working
 
-    batch_images, batch_labels = \
-        comet_dnn_input.read_tfrecord_to_tensor(
-        eval_files,
-        compression="GZIP",
-        buffer_size=2e9,
-        batch_size=FLAGS.batch_size,
-        epochs=FLAGS.epochs)
+    # TODO: make these inputs into passable parameters (flags?)
+    ckpt_num = "0" # string (for filepath concat)
+
+    # for Saver # '/Users/Jyx/Desktop/comet_stuff/20180730/00000003/train/model.ckpt-38887'
+    ckpt_name = FLAGS.checkpoint_dir + 'model-ckpt-' + ckpt_num # full path to checkpoint PREFIX (no file extensions)  
+    meta_file = ckpt_name + '.meta' # full filepath to meta file
+
+    # for SavedModel
+    model_dir = FLAGS.saved_model_dir + 'step_' + ckpt_num # full path to directory where SavedModel is stored
+
+    with tf.Graph().as_default():
+
+        # Make placeholders
+#        image_shape = [FLAGS.batch_size] + comet_dnn_input.IMAGE_SHAPE
+#        batch_images = tf.placeholder(tf.float32, shape=image_shape, name="input_images")
+#        label_shape = [FLAGS.batch_size] + comet_dnn_input.LABEL_SHAPE
+#        batch_labels = tf.placeholder(tf.float32, shape=label_shape, name="input_labels")
     
-    # Get the predictions
-    predictions = comet_dnn.inference(batch_images)
-    # Get the loss
-    loss = comet_dnn.loss(predictions, batch_labels)
+        # Extracting data
+        pred_data = comet_dnn_input.read_tfrecord_to_dataset(
+            eval_files,
+            compression="GZIP",
+            buffer_size=2e9,
+            batch_size=FLAGS.batch_size,
+            epochs=FLAGS.epochs,
+            seed=FLAGS.random_seed)
+        pred_iter = pred_data.make_one_shot_iterator()
+        pred_images, true_labels = pred_iter.get_next()
+
+
+#        predictions = comet_dnn.inference(batch_images)    
+
+        # Loss operation, currently not actually called
+#        loss = comet_dnn.loss(predictions, batch_labels)
+        
+        init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
+        
+        with tf.Session() as sess:
+            print("Entering session...")
+            # initialize variables
+            sess.run(init_op)
+
+            # Restore model, using Saver
+            print("Restoring checkpoint:" + ckpt_name)
+            saver = tf.train.import_meta_graph(meta_file)
+            saver.restore(sess, ckpt_name)
+
+            # Restore model, using SavedModel
+#            print("Reloaded model path:"+model_dir)
+#            tf.saved_model.loader.load(sess, ["test_tag"], model_dir)            
+
+            # Initializing new predictions operation (creates duplicates of 10 variables)
+            # predictions = comet_dnn.inference(batch_images) # REMEMBER TO COMMENT OUT THE ONE OUTSIDE SESSION TOO
+
+            # Using reloaded predictions operation instead
+            graph = tf.get_default_graph()
+            predictions = graph.get_tensor_by_name("predictions/predictions:0")
+            batch_images = graph.get_tensor_by_name("input_images:0")
+
+            test_tensor_to_print = "predictions/weights"
+
+            print("Printing tensors in checkpoint file:")
+            print_tensors_in_checkpoint_file(file_name=ckpt_name,
+                                             tensor_name=test_tensor_to_print,
+                                             all_tensors="",
+                                             all_tensor_names="") # outputs 47 tensors
+
+
+            print(np.shape(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)))
+#            for tensor in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
+#                print(tensor.name)
+            print(graph.get_tensor_by_name(test_tensor_to_print+":0"))
+            print(graph.get_tensor_by_name(test_tensor_to_print+":0").eval())
+
+
+#            for op in graph.get_operations():
+#                print(op.name)
+#                print(op)
+#            print(graph.get_tensor_by_name("predictions/predictions:0"))
+
+            # THINGS TO TRY: (no particular order)
+            # 1.5 try using saved/reloaded predictions op?
+
+            # return  # so i don't get error when predictions op isn't initialized
+
+            # Make feed_dict and run predictions operation
+            print("Running predictions operation...")
+            pred_feed = {batch_images: pred_images.eval()}
+            output = sess.run(predictions,feed_dict = pred_feed)
+            predicted_labels = output[:,FLAGS.num_classes-1]
+
+#            output2 = sess.run(reloaded_predictions_op, pred_feed)
+#            predicted_labels2 = output2[:,0]
     
+            print("Predictions:",predicted_labels)
+            print("Predictions size:",predicted_labels.shape)
+#            print("Predictions2:",predicted_labels2)
+            
+            all_true_labels = true_labels.eval() # turn true_labels tensor into array
+            true_labels = all_true_labels[:,FLAGS.num_classes-1] # only take columns we bothered predicting for
+            print("True labels:", true_labels)
+            print(true_labels.shape)
+   
+            residuals = true_labels - predicted_labels
+            print(residuals.shape)
+            
+            # Histograms
+            plt.figure(1)
+            plt.hist(true_labels,bins=np.linspace(0.1,1.1,128))
+            plt.xlim([0.1,1.1])
+            plt.grid(True)
+            plt.xlabel("True values (normalized)")
+            plt.ylabel("Count")
+            plt.title("True values histogram")
+            
+            plt.figure(2)
+            plt.hist(predicted_labels,bins=np.linspace(-1.0,1.0,128))
+            plt.xlim([-1,1])
+            plt.grid(True)
+            plt.xlabel("Predicted values (normalized)")
+            plt.ylabel("Count")
+            plt.title("Predictions histogram")
+    
+            plt.figure(3)
+            plt.hist(residuals,30)
+            plt.xlabel("True - predicted (normalized)")
+            plt.ylabel("Count")
+            plt.title("Residuals histogram")
+    
+            buff = 0.1 # buffer for axes limits
+    
+            # Colored correlation scatterplot
+            plt.figure(4)
+            plt.scatter(true_labels, predicted_labels, c=abs(residuals))
+            plt.plot([0,1],[0,1],'-k')
+            plt.xlim(min(true_labels)-buff, max(true_labels)+buff)
+            plt.ylim(min(predicted_labels)-buff, max(predicted_labels)+buff)
+            plt.xlabel("True labels")
+            plt.ylabel("Predicted labels")
+            plt.title("True vs. predicted")
+
+            # Residuals scatterplot
+            plt.figure(5)
+            plt.scatter(true_labels, residuals)
+            plt.plot([0,1],[0,0],'-b')
+            plt.xlim(min(true_labels)-buff, max(true_labels)+buff)
+            plt.ylim(min(residuals)-buff, max(residuals)+buff)
+            plt.xlabel("True labels")
+            plt.ylabel("Residuals")
+            plt.title("True vs. residuals")
+    
+            plt.show(block = True) # change to true if want to see plots
+
+            # FUNCTIONS TO TRY:
+            # tf.print_tensors_in_checkpoint_file
+      
+"""
     # Restore the moving average version of the learned variables for eval.
     variable_averages = tf.train.ExponentialMovingAverage(
         FLAGS.move_avg_decay)
     variables_to_restore = variable_averages.variables_to_restore()
     saver = tf.train.Saver(variables_to_restore)
-
+        
     # Build the summary operation based on the TF collection of Summaries.
     summary_op = tf.summary.merge_all()
     summary_writer = tf.summary.FileWriter(FLAGS.eval_dir)
@@ -133,13 +276,16 @@ def evaluate(eval_files):
         if FLAGS.run_once:
             break
         time.sleep(1)
-
+"""
 
 def main(argv=None):  # pylint: disable=unused-argument
+
     # Set the random seed
     FLAGS.random_seed = comet_dnn_input.set_global_seed(FLAGS.random_seed)
     # Dump the current settings to stdout
+    print("FLAGS:----------------------------")
     comet_dnn.print_all_flags()
+    print("----------------------------------")
     # Read the input files and shuffle them
     # TODO read these from file list found in train_dir
     training_files, testing_files = \

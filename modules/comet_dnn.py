@@ -46,6 +46,12 @@ tf.app.flags.DEFINE_boolean('use_fp16', False,
                             """Train the model using fp16.""")
 tf.app.flags.DEFINE_integer('num_classes', 1,
                             """Number of classes you want to regress""")
+tf.app.flags.DEFINE_integer('num_fc_nodes', 96,
+                            """Number of fully connected nodes""")
+tf.app.flags.DEFINE_float('weight_stddev', 5e-5,
+                          """Standard deviation for weights""")
+tf.app.flags.DEFINE_float('weight_decay', 5e-6,
+                          """Standard deviation for weight decays""")
 
 # TODO handle these inputs more dynamically as n_examples per file * n_files
 EXAMPLES_PER_EPOCH_FOR_TRAIN = 300000 # using 0.6 for now
@@ -118,7 +124,7 @@ def _variable_with_weight_decay(name, shape, stddev, w_decay):
     var = _variable_on_cpu(
         name,
         shape,
-        tf.truncated_normal_initializer(stddev=stddev, dtype=dtype))
+        tf.truncated_normal_initializer(stddev=stddev, dtype=dtype, seed=FLAGS.random_seed))
     if w_decay is not None:
         weight_decay = tf.multiply(tf.nn.l2_loss(var), w_decay,
                                    name='weight_loss')
@@ -170,12 +176,13 @@ def add_conv_lay(images, conv_shape, pool_shape, pool_strides,
     pool, norm :
         Output images of pooling layers
     """
-    with tf.variable_scope("conv"+layer_name) as scope:
+    with tf.variable_scope("conv"+layer_name, reuse=tf.AUTO_REUSE) as scope:
         # Initialize or get the kernel
         kernel = _variable_with_weight_decay(kernel_name,
                                              shape=conv_shape,
                                              stddev=stddev,
                                              w_decay=w_decay)
+
         # Perform the convolution
         conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
         # Initialize or get the biases
@@ -227,22 +234,22 @@ def inference(images):
                          layer_name="2")
 
     # fully_connected1
-    with tf.variable_scope('fully_connected1') as scope:
+    with tf.variable_scope('fully_connected1', reuse=tf.AUTO_REUSE) as scope:
         # Move everything into depth so we can perform a single matrix multiply.
         reshape = tf.reshape(conv2, [images.get_shape().as_list()[0], -1])
         dim = reshape.get_shape()[1].value
-        weights = _variable_with_weight_decay('weights', shape=[dim, 384],
-                                              stddev=0.04, w_decay=0.004)
-        biases = _variable_on_cpu('biases', [384], tf.constant_initializer(0.1))
+        weights = _variable_with_weight_decay('weights', shape=[dim, FLAGS.num_fc_nodes],
+                                              stddev=FLAGS.weight_stddev, w_decay=FLAGS.weight_decay)
+        biases = _variable_on_cpu('biases', [FLAGS.num_fc_nodes], tf.constant_initializer(0.1))
         fully_connected1 = tf.nn.relu(tf.matmul(reshape, weights) + biases,
                                       name=scope.name)
         _activation_summary(fully_connected1)
 
     # fully_connected2
-    with tf.variable_scope('fully_connected2') as scope:
-        weights = _variable_with_weight_decay('weights', shape=[384, 192],
-                                              stddev=0.04, w_decay=0.004)
-        biases = _variable_on_cpu('biases', [192], tf.constant_initializer(0.1))
+    with tf.variable_scope('fully_connected2',  reuse=tf.AUTO_REUSE) as scope:
+        weights = _variable_with_weight_decay('weights', shape=[FLAGS.num_fc_nodes, FLAGS.num_fc_nodes/2],
+                                              stddev=FLAGS.weight_stddev, w_decay=FLAGS.weight_decay)
+        biases = _variable_on_cpu('biases', [FLAGS.num_fc_nodes/2], tf.constant_initializer(0.1))
         fully_connected2 = \
                 tf.nn.relu(tf.matmul(fully_connected1, weights) + biases,
                            name=scope.name)
@@ -251,8 +258,8 @@ def inference(images):
     # Get the final predictions
     with tf.variable_scope('predictions') as scope:
         weights = _variable_with_weight_decay('weights',
-                                              [192, FLAGS.num_classes],
-                                              stddev=1/192.0, w_decay=None)
+                                              [FLAGS.num_fc_nodes/2, FLAGS.num_classes],
+                                              stddev=1/FLAGS.num_fc_nodes/2.0, w_decay=None)
         biases = _variable_on_cpu('biases', [FLAGS.num_classes],
                                   tf.constant_initializer(0.0))
         predictions = tf.add(tf.matmul(fully_connected2, weights), biases,
@@ -288,17 +295,15 @@ def loss(predictions, labels):
     tf.add_to_collection('losses', total_loss)
 
     # Save the residuals and root mean square for each function
-    label_norm = tf.constant(comet_dnn_input.LABEL_NORMALIZE,
-                             dtype=tf.float32,
-                             name="label_norms")
-
     for i in range(FLAGS.num_classes):
         # Fill histogram of residual
         name = comet_dnn_input.LABEL_NAMES[i]
-        tf.summary.histogram(name+"_res", tf.scalar_mul(label_norm[i], residuals[:, i]))
+        tf.summary.histogram("pre", predictions[:, i] , family=name)
+        tf.summary.histogram("lab", labels[:, i]      , family=name)
+        tf.summary.histogram("res", residuals[:, i]   , family=name)
         # Fill scalar summaries of the mean residuals and the RMS
-        tf.summary.scalar(name+"_mean_res", tf.scalar_mul(label_norm[i], mean_residuals[i]))
-        tf.summary.scalar(name+"_rms", tf.scalar_mul(label_norm[i], root_mean_square[i]))
+        tf.summary.scalar("mean", mean_residuals[i]   , family=name)
+        tf.summary.scalar("rms" , root_mean_square[i] , family=name)
 
     # Return the total loss
     return tf.add_n(tf.get_collection('losses'), name='total_loss')
@@ -359,7 +364,7 @@ def train(total_loss, global_step):
 
     # Compute gradients.
     with tf.control_dependencies([loss_averages_op]):
-        opt = tf.train.GradientDescentOptimizer(learn_r)
+        opt = tf.train.AdamOptimizer(learn_r)
         grads = opt.compute_gradients(total_loss)
 
     # Apply gradients.

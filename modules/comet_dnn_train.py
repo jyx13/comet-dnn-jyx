@@ -17,6 +17,7 @@ from __future__ import print_function
 from datetime import datetime
 import time
 import os
+import shutil
 
 import tensorflow as tf
 
@@ -34,7 +35,7 @@ tf.app.flags.DEFINE_string('train_dir', None,
                            """checkpoints.  Overrides the default """
                            """FLAGS.model_dir+'/train'""")
 tf.app.flags.DEFINE_string('test_dir', None,
-                           """Directory where to testing summaries"""
+                           """Directory where to write testing summaries"""
                            """Overrides the default """
                            """FLAGS.model_dir+'/train'""")
 tf.app.flags.DEFINE_integer('max_steps', None,
@@ -48,6 +49,10 @@ tf.app.flags.DEFINE_integer('evaluation_frequency', None,
 tf.app.flags.DEFINE_integer("num_checkpoints_steps", 10000,
                             """Number of steps per check point you want to """
                             """save.""")
+tf.app.flags.DEFINE_boolean("debug_mode", False,
+                            """Whether to active debug mode""")
+tf.app.flags.DEFINE_boolean("save_image", False,
+                            """Whether to save images""")
 
 def _print_summary(batch_size, sec_per_batch, step, train_loss, test_loss):
     """
@@ -61,6 +66,7 @@ def _print_summary(batch_size, sec_per_batch, step, train_loss, test_loss):
 def train(training_files, testing_files):
     # Open a graph
     with tf.Graph().as_default():
+
         # Get or create the global step
         global_step = tf.train.get_or_create_global_step()
         # Create placeholder images
@@ -82,18 +88,29 @@ def train(training_files, testing_files):
                 compression="GZIP",
                 buffer_size=FLAGS.input_buffer_size,
                 batch_size=FLAGS.batch_size,
-                epochs=FLAGS.epochs)
+                epochs=FLAGS.epochs,
+                seed=FLAGS.random_seed)
             train_iter = train_data.make_one_shot_iterator()
             train_images, train_labels = train_iter.get_next()
+
             # Get the testing dataset and reinitializable iterator
             test_data = comet_dnn_input.read_tfrecord_to_dataset(
                 testing_files,
                 compression="GZIP",
                 buffer_size=FLAGS.input_buffer_size,
                 batch_size=FLAGS.batch_size,
-                epochs=1)
+                epochs=1,
+                seed=FLAGS.random_seed)
             test_iter = test_data.make_initializable_iterator()
             test_images, test_labels = test_iter.get_next()
+
+        # Save images
+        if (FLAGS.save_image==True):
+            tf.summary.image("train_images_q", train_images[:,:,:,:1])
+            tf.summary.image("train_images_t", train_images[:,:,:,1:])
+            tf.summary.image("test_images_q", train_images[:,:,:,:1])
+            tf.summary.image("test_images_t", train_images[:,:,:,1:])
+
         # Build a Graph that computes the regresses the values from the images
         predictions = comet_dnn.inference(batch_images)
         # Calculate loss using the labels
@@ -104,11 +121,20 @@ def train(training_files, testing_files):
         train_op = comet_dnn.train(loss, global_step)
 
         # Build an initialization operation to run below.
-        init = tf.initialize_all_variables()
+        init = tf.global_variables_initializer()
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.summary.merge_all()
         # Create a saver.
-        saver = tf.train.Saver(tf.all_variables())
+        saver = tf.train.Saver(tf.global_variables(), max_to_keep=10000) # don't cap the number of checkpoints to be made
+
+        # Create a builder (to be used instead of train.Saver).
+        if os.path.exists(FLAGS.model_dir):
+            shutil.rmtree(FLAGS.model_dir)
+            print("Removed extant train_test_dir directory")
+        os.makedirs(FLAGS.model_dir)
+        print("Created new train_test_dir directory")
+        saved_model_dir = FLAGS.model_dir+'/SavedModel_test'
+        final_builder = tf.saved_model.builder.SavedModelBuilder(saved_model_dir+'/step_final')
 
         # Get the average total loss for the test epoch
         eval_loss = tf.placeholder(tf.float32)
@@ -130,17 +156,30 @@ def train(training_files, testing_files):
             # Run the training loop
             keep_running = True
             while keep_running:
-                # Incerment the step number
+                # Increment the step number
                 step += 1
+                if step == 5: # just for testing purposes, to interrupt training after some number of steps
+                    keep_running = False
                 try:
                     # Get the start time
                     start_time = time.time()
                     # Define the information for this train_feed
                     train_feed = {batch_images : train_images.eval(),
                                   batch_labels : train_labels.eval()}
-                    # Run the session
-                    _, train_loss = sess.run([train_op, loss],
-                                             feed_dict=train_feed)
+                    # Run the session--this line does all the heavy computing
+                    _, train_pred, train_loss = sess.run([train_op, predictions, loss],
+                                                         feed_dict=train_feed)
+
+                    # Debug train_feed, print only first element of labels
+                    if(FLAGS.debug_mode==True):
+                        print("----------------", "\n"
+                              "Debug mode", "\n"
+                              "train_labels", "\n"
+                              "Type: ", type(train_feed[batch_labels]), "\n"
+                              "Dim: " , train_feed[batch_labels].shape, "\n"
+                              "First row label: " , train_feed[batch_labels][0], "\n",
+                              "First row predi: " , train_pred[0], "\n",
+                              "----------------", "\n")
                     sec_per_batch = time.time() - start_time
                     # Print some values to std_out
                     if step % FLAGS.summary_frequency == 0:
@@ -153,11 +192,15 @@ def train(training_files, testing_files):
                                               eval_n_batches : 1}
                         train_summary = sess.run(eval_loss_summary,
                                                  feed_dict=train_summary_dict)
+
                         train_summary_writer.add_summary(train_summary, step)
                     # Save the model checkpoint periodically.
                     if step % FLAGS.num_checkpoints_steps == 0:
-                        model_name = FLAGS.train_dir+'model.ckpt'
-                        saver.save(sess, model_name, global_step=step)
+                        model_name = FLAGS.train_dir+'model-ckpt'
+                        saver.save(sess, model_name, global_step=step) # save variables
+                        builder = tf.saved_model.builder.SavedModelBuilder(saved_model_dir+'/step_'+str(step))
+                        builder.add_meta_graph_and_variables(sess, ['test_tag'])
+                        builder.save() # save full model
                     if FLAGS.max_steps is not None and step > FLAGS.max_steps:
                         keep_running = False
                     # Evaluate the testing sample
@@ -190,13 +233,16 @@ def train(training_files, testing_files):
                         test_summmary = sess.run(eval_loss_summary,
                                                  feed_dict=test_summary_dict)
                         test_summary_writer.add_summary(test_summmary, step)
-                # Stop the training loop if we reach the end of the training
-                # loop
+                # Stop the training loop if we reach the end of the training loop
                 except tf.errors.OutOfRangeError:
                     checkpoint_path = os.path.join(FLAGS.train_dir,
-                                                   'model.ckpt')
-                    saver.save(sess, checkpoint_path, global_step=step)
+                                                   'model-ckpt')
+                    saver.save(sess, checkpoint_path, global_step=step) # save final variables
                     keep_running = False
+
+            final_builder.add_meta_graph_and_variables(sess, ["test_tag"], strip_default_attrs=False)
+        final_builder.save() # save full final model
+
 
 def main(argv=None):  # pylint: disable=unused-argument
     # Set the random seed
@@ -259,7 +305,7 @@ if __name__ == '__main__':
 #        ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
 #        restored_step = 1
 #        # Create a saver.
-#        saver = tf.train.Saver(tf.all_variables())
+#        saver = tf.train.Saver(tf.global_variables())
 #        # Define model path
 #        if ckpt and ckpt.model_checkpoint_path:
 #            print("======================================")
