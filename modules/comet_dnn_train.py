@@ -239,7 +239,7 @@ def train(training_files, testing_files):
                 except tf.errors.OutOfRangeError:
                     checkpoint_path = os.path.join(FLAGS.train_dir, 'model-ckpt')
                     saver.save(sess, checkpoint_path, global_step=step) # save final variables
-                    final_builder = tf.saved_model.builder.SavedModelBuilder(FLAGS.saved_model_dir+str(step))
+                    final_builder = tf.saved_model.builder.SavedModelBuilder(FLAGS.saved_model_dir+'/step_'+str(step))
                     final_builder.add_meta_graph_and_variables(sess, ["test_tag"], strip_default_attrs=False)
                     final_builder.save() # save full final model
                     keep_running = False
