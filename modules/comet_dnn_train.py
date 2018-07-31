@@ -200,7 +200,7 @@ def train(training_files, testing_files):
                     if step % FLAGS.num_checkpoints_steps == 0:
                         model_name = FLAGS.train_dir+'model-ckpt'
                         saver.save(sess, model_name, global_step=step) # save variables
-                        builder = tf.saved_model.builder.SavedModelBuilder(FLAGS.saved_model_dir+'/step_'+str(step))
+                        builder = tf.saved_model.builder.SavedModelBuilder(FLAGS.saved_model_dir+'step_'+str(step))
                         builder.add_meta_graph_and_variables(sess, ['test_tag'])
                         builder.save() # save full model
                     if FLAGS.max_steps is not None and step > FLAGS.max_steps:
@@ -239,7 +239,7 @@ def train(training_files, testing_files):
                 except tf.errors.OutOfRangeError:
                     checkpoint_path = os.path.join(FLAGS.train_dir, 'model-ckpt')
                     saver.save(sess, checkpoint_path, global_step=step) # save final variables
-                    final_builder = tf.saved_model.builder.SavedModelBuilder(FLAGS.saved_model_dir+'/step_'+str(step))
+                    final_builder = tf.saved_model.builder.SavedModelBuilder(FLAGS.saved_model_dir+'step_'+str(step))
                     final_builder.add_meta_graph_and_variables(sess, ["test_tag"], strip_default_attrs=False)
                     final_builder.save() # save full final model
                     keep_running = False

@@ -8,7 +8,7 @@
 --move_avg_decay=0.9999
 --batch_size=32
 --num_classes=1
---model_dir=/Users/Jyx/Desktop/train_test_dir
+--model_dir=/Users/Jyx/Desktop/train_test_dir/
 --log_dev_place=False
 --summary_frequency=1
 --num_checkpoints_steps=1
