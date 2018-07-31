@@ -37,7 +37,11 @@ tf.app.flags.DEFINE_string('train_dir', None,
 tf.app.flags.DEFINE_string('test_dir', None,
                            """Directory where to write testing summaries"""
                            """Overrides the default """
-                           """FLAGS.model_dir+'/train'""")
+                           """FLAGS.model_dir+'/test'""")
+tf.app.flags.DEFINE_string('saved_model_dir', None,
+                           """Directory where to read SavedModel."""
+                           """Overrides the default """
+                           """FLAGS.model_dir+'/SavedModel'""")
 tf.app.flags.DEFINE_integer('max_steps', None,
                             """Number of batches to run.""")
 tf.app.flags.DEFINE_boolean('log_dev_place', False,
@@ -130,11 +134,9 @@ def train(training_files, testing_files):
         # Create a builder (to be used instead of train.Saver).
         if os.path.exists(FLAGS.model_dir):
             shutil.rmtree(FLAGS.model_dir)
-            print("Removed extant train_test_dir directory")
+            print("Removed extant model directory")
         os.makedirs(FLAGS.model_dir)
-        print("Created new train_test_dir directory")
-        saved_model_dir = FLAGS.model_dir+'/SavedModel_test'
-        final_builder = tf.saved_model.builder.SavedModelBuilder(saved_model_dir+'/step_final')
+        print("Created new model directory")
 
         # Get the average total loss for the test epoch
         eval_loss = tf.placeholder(tf.float32)
@@ -198,7 +200,7 @@ def train(training_files, testing_files):
                     if step % FLAGS.num_checkpoints_steps == 0:
                         model_name = FLAGS.train_dir+'model-ckpt'
                         saver.save(sess, model_name, global_step=step) # save variables
-                        builder = tf.saved_model.builder.SavedModelBuilder(saved_model_dir+'/step_'+str(step))
+                        builder = tf.saved_model.builder.SavedModelBuilder(FLAGS.saved_model_dir+'/step_'+str(step))
                         builder.add_meta_graph_and_variables(sess, ['test_tag'])
                         builder.save() # save full model
                     if FLAGS.max_steps is not None and step > FLAGS.max_steps:
@@ -235,13 +237,12 @@ def train(training_files, testing_files):
                         test_summary_writer.add_summary(test_summmary, step)
                 # Stop the training loop if we reach the end of the training loop
                 except tf.errors.OutOfRangeError:
-                    checkpoint_path = os.path.join(FLAGS.train_dir,
-                                                   'model-ckpt')
+                    checkpoint_path = os.path.join(FLAGS.train_dir, 'model-ckpt')
                     saver.save(sess, checkpoint_path, global_step=step) # save final variables
+                    final_builder = tf.saved_model.builder.SavedModelBuilder(FLAGS.saved_model_dir+str(step))
+                    final_builder.add_meta_graph_and_variables(sess, ["test_tag"], strip_default_attrs=False)
+                    final_builder.save() # save full final model
                     keep_running = False
-
-            final_builder.add_meta_graph_and_variables(sess, ["test_tag"], strip_default_attrs=False)
-        final_builder.save() # save full final model
 
 
 def main(argv=None):  # pylint: disable=unused-argument
@@ -268,6 +269,8 @@ def main(argv=None):  # pylint: disable=unused-argument
         FLAGS.train_dir = FLAGS.model_dir + "/train/"
     if FLAGS.test_dir is None:
         FLAGS.test_dir = FLAGS.model_dir + "/test/"
+    if FLAGS.saved_model_dir is None:
+        FLAGS.saved_model_dir = FLAGS.model_dir+"/SavedModel/"
     # Create check point directory
     if tf.gfile.Exists(FLAGS.train_dir):
         print("WARNING:", FLAGS.train_dir, "exists")

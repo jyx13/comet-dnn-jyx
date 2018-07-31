@@ -160,8 +160,8 @@ def train(training_files, testing_files):
             while keep_running:
                 # Increment the step number
                 step += 1
-                if step == 5: # just for testing purposes, to interrupt training after some number of steps
-                    keep_running = False
+#                if step == 5: # just for testing purposes, to interrupt training after some number of steps
+#                    keep_running = False
                 try:
                     # Get the start time
                     start_time = time.time()
