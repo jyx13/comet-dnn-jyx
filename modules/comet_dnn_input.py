@@ -48,7 +48,7 @@ LABEL_NAMES = ["p_t", "p_z",
                "n_turns"]
 
 LABEL_TITLES = ['Transverse_Momentum',
-                'Longituadinal_Momentum',
+                'Longitudinal_Momentum',
                 'Entry_of_X',
                 'Entry_of_Y',
                 'Entry_of_Z',

@@ -205,8 +205,8 @@ def parse_record_into_tensors(record):
                              dtype=tf.float32,
                              name="label_norms")
     all_labels_normed = tf.div(all_labels, label_norm)
-    #return image, all_labels_normed
-    return image, all_labels
+    return image, all_labels_normed
+    #return image, all_labels
 
 def read_tfrecord_to_dataset(filenames,
                              compression="GZIP",

@@ -6,8 +6,8 @@
 # evaluate() is able to properly(?) restore a model from checkpoint (using either Saver or SavedModel),
 # and then makes a few useful plots for model assessment.
 # While restored variables are identical to the ones saved in checkpoints,
-# they still look different from tensorboard by eye--reasons unclear.
-# -- 2018/07/31, Jordan Xiao
+# histograms still look different from tensorboard by eye--reasons unclear.
+# -- 2018/08/01, Jordan Xiao
 
 """Evaluation for comet_dnn.
 
@@ -112,6 +112,85 @@ def eval_once(saver, summary_writer, batch_predictions, batch_labels, summary_op
             print('No checkpoint file found')
             return
 
+def eval_plots(compiled_true_labels, compiled_predicted_labels, ckpt_num):
+    # made this a separate function to keep evaluate() from being too cluttered
+    # INPUTS: both have dimensions of batch_size rows by num_classes columns (ckpt_num for title purposes)
+    # OUTPUTS: five plots per label
+               
+    # To improve:
+    # 1. custom x-axis limits and binning for histograms (probably want to customize depending on which label)
+    # 2. re-scale labels back into natural units (un-normalizing)
+
+    LABEL_NAMES = ["p_t", "p_z",
+               "entry_x", "entry_y", "entry_z",
+               "vert_x", "vert_y", "vert_z",
+               "n_turns"]
+
+    LABEL_LIMS = [] # to be filled in with suitable values for each label
+    LABEL_NORMALIZE = [110.0, 155.,
+                   110., 115., 125.,
+                   22., 22., 85.,
+                   5.] # remember to update this if the one in comet_dnn_inputs.py is changed
+
+    n = 5 # number of plots; used to prevent figure overlapping, also makes it easier to add new plots
+
+    # Get residuals (same dimensions as label arrays)
+    compiled_residuals = compiled_true_labels - compiled_predicted_labels
+
+    for i in np.arange(FLAGS.num_classes): # i is index for cycling through labels
+        lbl_name = LABEL_NAMES[i]
+        
+        true_labels = compiled_true_labels[:,i]
+        predicted_labels = compiled_predicted_labels[:,i]
+        residuals = compiled_residuals[:,i]
+
+        # Histograms
+        plt.figure(i*n+1)
+        plt.hist(true_labels,30) # bins=np.linspace(0.1,1.1,128))
+        # plt.xlim([0.1,1.1])
+        plt.grid(True)
+        plt.xlabel("True values (normalized)")
+        plt.ylabel("Count")
+        plt.title(lbl_name+" true histogram (Ckpt "+ckpt_num+")")
+
+        plt.figure(i*n+2)
+        plt.hist(predicted_labels,30) # bins=np.linspace(-1.0,1.0,128))
+        # plt.xlim([-1,1])
+        plt.grid(True)
+        plt.xlabel("Predicted values (normalized)")
+        plt.ylabel("Count")
+        plt.title(lbl_name+" predictions histogram (Ckpt "+ckpt_num+")")
+
+        plt.figure(i*n+3)
+        plt.hist(residuals,30)
+        plt.xlabel("True - predicted (normalized)")
+        plt.ylabel("Count")
+        plt.title(lbl_name+" residuals histogram (Ckpt "+ckpt_num+")")
+
+        buff = 0.1 # buffer for scatterplot axes limits; scaled to normalized data
+
+        # Colored correlation scatterplot
+        plt.figure(i*n+4)
+        plt.scatter(true_labels, predicted_labels, c=abs(residuals))
+        plt.plot([0,1],[0,1],'-k')
+        plt.xlim(min(true_labels)-buff, max(true_labels)+buff)
+        plt.ylim(min(predicted_labels)-buff, max(predicted_labels)+buff)
+        plt.xlabel("True labels")
+        plt.ylabel("Predicted labels")
+        plt.title(lbl_name+" true vs. predicted (Ckpt "+ckpt_num+")")
+
+        # Residuals scatterplot
+        plt.figure(i*n+5)
+        plt.scatter(true_labels, residuals)
+        plt.plot([0,1],[0,0],'-b')
+        plt.xlim(min(true_labels)-buff, max(true_labels)+buff)
+        plt.ylim(min(residuals)-buff, max(residuals)+buff)
+        plt.xlabel("True labels")
+        plt.ylabel("Residuals")
+        plt.title(lbl_name+" true vs. residuals (Ckpt "+ckpt_num+")")
+
+    plt.show(block = FLAGS.show_eval_plots) # block = True means show plots
+
 
 def evaluate(eval_files):
 
@@ -158,88 +237,38 @@ def evaluate(eval_files):
             batch_images = graph.get_tensor_by_name("input_images:0")
 
             # A BUNCH OF PRINT STATEMENTS FOR DEBUGGING MODEL RESTORE
-            tensor_to_print = "predictions/weights" # if want to print individual tensor from graph
+#            tensor_to_print = "predictions/weights" # if want to print individual tensor from graph
 
-            print("Printing tensor(s) in checkpoint file:")
-            print_tensors_in_checkpoint_file(file_name=ckpt_name,
-                                             tensor_name=tensor_to_print,
-                                             all_tensors="",
-                                             all_tensor_names="")
+#            print("Printing tensor(s) in checkpoint file:")
+#            print_tensors_in_checkpoint_file(file_name=ckpt_name,
+#                                             tensor_name=tensor_to_print,
+#                                             all_tensors="",
+#                                             all_tensor_names="")
 
 #            print(np.shape(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)))
 #            for tensor in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
 #                print(tensor.name)
-            print(graph.get_tensor_by_name(tensor_to_print+":0"))
-            print(graph.get_tensor_by_name(tensor_to_print+":0").eval())
+#            print(graph.get_tensor_by_name(tensor_to_print+":0"))
+#            print(graph.get_tensor_by_name(tensor_to_print+":0").eval())
 
 #            for op in graph.get_operations():
 #                print(op.name)
 #                print(op)
 #            print(graph.get_tensor_by_name("predictions/predictions:0"))
 
+            # Get desired true labels
+            all_true_labels = true_labels.eval() # turn true_labels tensor into array
+            true_labels = all_true_labels[:,0:FLAGS.num_classes] # only take columns we bothered predicting for
+            print("True labels:", true_labels)
+
             # Make feed_dict and run predictions operation
             print("Running predictions operation...")
             pred_feed = {batch_images: pred_images.eval()}
-            output = sess.run(predictions,feed_dict = pred_feed)
-            predicted_labels = output[:,FLAGS.num_classes-1]
-
-            print("Predictions:",predicted_labels)
-#            print("Predictions size:",predicted_labels.shape)
-            
-            all_true_labels = true_labels.eval() # turn true_labels tensor into array
-            true_labels = all_true_labels[:,FLAGS.num_classes-1] # only take columns we bothered predicting for
-            print("True labels:", true_labels)
-#            print(true_labels.shape)
-   
-            residuals = true_labels - predicted_labels
-#            print(residuals.shape)
-            
-            # Histograms
-            plt.figure(1)
-            plt.hist(true_labels,bins=np.linspace(0.1,1.1,128))
-            plt.xlim([0.1,1.1])
-            plt.grid(True)
-            plt.xlabel("True values (normalized)")
-            plt.ylabel("Count")
-            plt.title("True values histogram (Ckpt "+ckpt_num+")")
-            
-            plt.figure(2)
-            plt.hist(predicted_labels,bins=np.linspace(-1.0,1.0,128))
-            plt.xlim([-1,1])
-            plt.grid(True)
-            plt.xlabel("Predicted values (normalized)")
-            plt.ylabel("Count")
-            plt.title("Predictions histogram (Ckpt "+ckpt_num+")")
-    
-            plt.figure(3)
-            plt.hist(residuals,30)
-            plt.xlabel("True - predicted (normalized)")
-            plt.ylabel("Count")
-            plt.title("Residuals histogram (Ckpt "+ckpt_num+")")
-    
-            buff = 0.1 # buffer for axes limits
-    
-            # Colored correlation scatterplot
-            plt.figure(4)
-            plt.scatter(true_labels, predicted_labels, c=abs(residuals))
-            plt.plot([0,1],[0,1],'-k')
-            plt.xlim(min(true_labels)-buff, max(true_labels)+buff)
-            plt.ylim(min(predicted_labels)-buff, max(predicted_labels)+buff)
-            plt.xlabel("True labels")
-            plt.ylabel("Predicted labels")
-            plt.title("True vs. predicted (Ckpt "+ckpt_num+")")
-
-            # Residuals scatterplot
-            plt.figure(5)
-            plt.scatter(true_labels, residuals)
-            plt.plot([0,1],[0,0],'-b')
-            plt.xlim(min(true_labels)-buff, max(true_labels)+buff)
-            plt.ylim(min(residuals)-buff, max(residuals)+buff)
-            plt.xlabel("True labels")
-            plt.ylabel("Residuals")
-            plt.title("True vs. residuals (Ckpt "+ckpt_num+")")
-    
-            plt.show(block = FLAGS.show_eval_plots) # change to true if want to see plots
+            predicted_labels = sess.run(predictions, feed_dict = pred_feed)
+            print("Predictions:", predicted_labels)
+ 
+            # Get some useful plots
+            eval_plots(true_labels, predicted_labels, ckpt_num)
 
 """
     # Restore the moving average version of the learned variables for eval.

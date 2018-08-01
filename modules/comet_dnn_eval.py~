@@ -2,7 +2,12 @@
 # They use the Apache license.  We will use the same.
 #     http://www.apache.org/licenses/LICENSE-2.0
 # ==============================================================================
-# TODO get this file working
+# CURRENT STATUS: eval_once() has been ignored in favor of evaluate().
+# evaluate() is able to properly(?) restore a model from checkpoint (using either Saver or SavedModel),
+# and then makes a few useful plots for model assessment.
+# While restored variables are identical to the ones saved in checkpoints,
+# they still look different from tensorboard by eye--reasons unclear.
+# -- 2018/07/31, Jordan Xiao
 
 """Evaluation for comet_dnn.
 
@@ -36,10 +41,14 @@ tf.app.flags.DEFINE_string('eval_dir', '/tmp/comet_dnn_eval',
                            """Directory where to write event logs.""")
 tf.app.flags.DEFINE_boolean('eval_test', True,
                            """If true, evaluates the testing data""")
-tf.app.flags.DEFINE_string('checkpoint_dir', None, #'/Users/Jyx/Desktop/train_test_dir/train/',
-                           """Directory where to read model checkpoints.""")
-tf.app.flags.DEFINE_string('saved_model_dir', None, # '/Users/Jyx/Desktop/train_test_dir/SavedModel/',
-                           """Directory where to read saved model.""")
+tf.app.flags.DEFINE_string('saver_ckpt_dir', None,
+                           """Directory where to read checkpoints (for TF Saver).""")
+tf.app.flags.DEFINE_string('saved_model_dir', None,
+                           """Directory where to read saved model (for TF SavedModel).""")
+tf.app.flags.DEFINE_string('checkpoint_num', None,
+                           """Number of checkpoint to be reloaded.""")
+tf.app.flags.DEFINE_boolean('show_eval_plots', True,
+                           """If true, show histograms and correlation plots.""")
 tf.app.flags.DEFINE_integer('eval_interval_secs', 60 * 5,
                             """How often to run the eval.""")
 tf.app.flags.DEFINE_integer('num_examples', 10000,
@@ -104,12 +113,12 @@ def eval_once(saver, summary_writer, batch_predictions, batch_labels, summary_op
             return
 
 
-def evaluate(eval_files): # function to improve and get working
+def evaluate(eval_files):
 
-    ckpt_num = "0" # string (for filepath concat)
+    ckpt_num = FLAGS.checkpoint_num # string (for filepath concat)
 
     # for Saver
-    ckpt_name = FLAGS.checkpoint_dir + 'model-ckpt-' + ckpt_num # full path to checkpoint PREFIX (no file extensions)  
+    ckpt_name = FLAGS.saver_ckpt_dir + 'model-ckpt-' + ckpt_num # full path to checkpoint PREFIX (no file extensions)  
     meta_file = ckpt_name + '.meta' # full filepath to meta file
 
     # for SavedModel
@@ -149,19 +158,19 @@ def evaluate(eval_files): # function to improve and get working
             batch_images = graph.get_tensor_by_name("input_images:0")
 
             # A BUNCH OF PRINT STATEMENTS FOR DEBUGGING MODEL RESTORE
-#            tensor_to_print = "predictions/weights" # if want to print individual tensor from graph
+            tensor_to_print = "predictions/weights" # if want to print individual tensor from graph
 
-#            print("Printing tensors in checkpoint file:")
-#            print_tensors_in_checkpoint_file(file_name=ckpt_name,
-#                                             tensor_name=tensor_to_print,
-#                                             all_tensors="",
-#                                             all_tensor_names="")
+            print("Printing tensor(s) in checkpoint file:")
+            print_tensors_in_checkpoint_file(file_name=ckpt_name,
+                                             tensor_name=tensor_to_print,
+                                             all_tensors="",
+                                             all_tensor_names="")
 
 #            print(np.shape(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)))
 #            for tensor in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
 #                print(tensor.name)
-#            print(graph.get_tensor_by_name(tensor_to_print+":0"))
-#            print(graph.get_tensor_by_name(tensor_to_print+":0").eval())
+            print(graph.get_tensor_by_name(tensor_to_print+":0"))
+            print(graph.get_tensor_by_name(tensor_to_print+":0").eval())
 
 #            for op in graph.get_operations():
 #                print(op.name)
@@ -175,15 +184,15 @@ def evaluate(eval_files): # function to improve and get working
             predicted_labels = output[:,FLAGS.num_classes-1]
 
             print("Predictions:",predicted_labels)
-            print("Predictions size:",predicted_labels.shape)
+#            print("Predictions size:",predicted_labels.shape)
             
             all_true_labels = true_labels.eval() # turn true_labels tensor into array
             true_labels = all_true_labels[:,FLAGS.num_classes-1] # only take columns we bothered predicting for
             print("True labels:", true_labels)
-            print(true_labels.shape)
+#            print(true_labels.shape)
    
             residuals = true_labels - predicted_labels
-            print(residuals.shape)
+#            print(residuals.shape)
             
             # Histograms
             plt.figure(1)
@@ -192,7 +201,7 @@ def evaluate(eval_files): # function to improve and get working
             plt.grid(True)
             plt.xlabel("True values (normalized)")
             plt.ylabel("Count")
-            plt.title("True values histogram")
+            plt.title("True values histogram (Ckpt "+ckpt_num+")")
             
             plt.figure(2)
             plt.hist(predicted_labels,bins=np.linspace(-1.0,1.0,128))
@@ -200,13 +209,13 @@ def evaluate(eval_files): # function to improve and get working
             plt.grid(True)
             plt.xlabel("Predicted values (normalized)")
             plt.ylabel("Count")
-            plt.title("Predictions histogram")
+            plt.title("Predictions histogram (Ckpt "+ckpt_num+")")
     
             plt.figure(3)
             plt.hist(residuals,30)
             plt.xlabel("True - predicted (normalized)")
             plt.ylabel("Count")
-            plt.title("Residuals histogram")
+            plt.title("Residuals histogram (Ckpt "+ckpt_num+")")
     
             buff = 0.1 # buffer for axes limits
     
@@ -218,7 +227,7 @@ def evaluate(eval_files): # function to improve and get working
             plt.ylim(min(predicted_labels)-buff, max(predicted_labels)+buff)
             plt.xlabel("True labels")
             plt.ylabel("Predicted labels")
-            plt.title("True vs. predicted")
+            plt.title("True vs. predicted (Ckpt "+ckpt_num+")")
 
             # Residuals scatterplot
             plt.figure(5)
@@ -228,9 +237,9 @@ def evaluate(eval_files): # function to improve and get working
             plt.ylim(min(residuals)-buff, max(residuals)+buff)
             plt.xlabel("True labels")
             plt.ylabel("Residuals")
-            plt.title("True vs. residuals")
+            plt.title("True vs. residuals (Ckpt "+ckpt_num+")")
     
-            plt.show(block = True) # change to true if want to see plots
+            plt.show(block = FLAGS.show_eval_plots) # change to true if want to see plots
 
 """
     # Restore the moving average version of the learned variables for eval.
@@ -267,11 +276,10 @@ def main(argv=None):  # pylint: disable=unused-argument
                                                        FLAGS.random_seed)
 
     # Create a name for the train and test dirs
-    if FLAGS.checkpoint_dir is None:
-        FLAGS.checkpoint_dir = FLAGS.model_dir + "/train/"
+    if FLAGS.saver_ckpt_dir is None:
+        FLAGS.saver_ckpt_dir = FLAGS.model_dir + "/train/"
     if FLAGS.saved_model_dir is None:
         FLAGS.saved_model_dir = FLAGS.model_dir+"/SavedModel/"
-
 
     # Evaluate the testing files by default
     eval_files = testing_files
