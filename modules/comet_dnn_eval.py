@@ -126,23 +126,23 @@ def eval_plots(compiled_true_labels, compiled_predicted_labels, ckpt_num):
                         FLAGS.train_entry_x, FLAGS.train_entry_y, FLAGS.train_entry_z,
                         FLAGS.train_vert_x, FLAGS.train_vert_y, FLAGS.train_vert_z,
                         FLAGS.train_n_turns ]
-    print("Labels trained for:",lbls_trained_for)
+    print("Labels trained for:", lbls_trained_for)
 
     LABEL_NAMES = ["p_t", "p_z",
                    "entry_x", "entry_y", "entry_z",
                    "vert_x", "vert_y", "vert_z",
                    "n_turns"]
 
-    print(LABEL_NAMES)
     # to avoid getting error in case lbls_trained_for is all 0s, re-order LABEL_NAMES instead of using new var
     # (same re-ordering technique as in train.py)
+    # also have to re-order true label values array before plotting
     i = 0
     for j in range(len(lbls_trained_for)):
         if lbls_trained_for[j]:
             LABEL_NAMES[i] = LABEL_NAMES[j]
             i += 1
 
-    print(LABEL_NAMES)
+    print(LABEL_NAMES[:FLAGS.num_classes])
 
     LABEL_LIMS = [] # to be filled in with suitable values for each label
     LABEL_NORMALIZE = [110.0, 155.,
@@ -214,6 +214,13 @@ def evaluate(eval_files):
 
     ckpt_num = FLAGS.checkpoint_num # string (for filepath concat)
 
+    # Compile which labels will be trained for                                                                                                          
+    lbls_trained_for = [FLAGS.train_p_t, FLAGS.train_p_z,
+                     FLAGS.train_entry_x, FLAGS.train_entry_y, FLAGS.train_entry_z,
+                     FLAGS.train_vert_x, FLAGS.train_vert_y, FLAGS.train_vert_z,
+                     FLAGS.train_n_turns ]
+    print("Labels trained for:",lbls_trained_for)
+
     # for Saver
     ckpt_name = FLAGS.saver_ckpt_dir + 'model-ckpt-' + ckpt_num # full path to checkpoint PREFIX (no file extensions)  
     meta_file = ckpt_name + '.meta' # full filepath to meta file
@@ -275,8 +282,14 @@ def evaluate(eval_files):
 #            print(graph.get_tensor_by_name("predictions/predictions:0"))
 
             # Get desired true labels
-            all_true_labels = true_labels.eval() # turn true_labels tensor into array
-            true_labels = all_true_labels[:,0:FLAGS.num_classes] # only take columns we bothered predicting for
+            all_true_labels = true_labels.eval() # turn tensor into array
+            # Move columns of predicted true labels to front of array                                                              
+            col_i = 0
+            for lbl_i in range(len(lbls_trained_for)):
+                if lbls_trained_for[lbl_i]:
+                    all_true_labels[:,col_i] = all_true_labels[:,lbl_i]
+                    col_i += 1
+            true_labels = all_true_labels[:,:FLAGS.num_classes] # for easier printing, only take columns we bothered training for
             print("True labels:", true_labels)
 
             # Make feed_dict and run predictions operation
