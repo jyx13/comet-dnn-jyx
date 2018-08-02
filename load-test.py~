@@ -83,7 +83,7 @@ with tf.Session() as sess:
 #    sess.run(init_op)
 #    sess.run(tf.summary.merge_all())
 
-    print(output) # for unclear reasons, weights change every time script is run (random seed on initialization?)
+    print(output) # note: weights change every time unless random seed is set to constant value
     plt.hist(output,30)
     plt.xlabel("Prediction")
     plt.ylabel("Count")

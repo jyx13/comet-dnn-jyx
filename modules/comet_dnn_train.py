@@ -58,6 +58,9 @@ tf.app.flags.DEFINE_boolean("debug_mode", False,
 tf.app.flags.DEFINE_boolean("save_image", False,
                             """Whether to save images""")
 
+
+
+
 def _print_summary(batch_size, sec_per_batch, step, train_loss, test_loss):
     """
     Print a summary of the current run
@@ -73,6 +76,14 @@ def train(training_files, testing_files):
 
         # Get or create the global step
         global_step = tf.train.get_or_create_global_step()
+
+        # Compile which labels will be trained for
+        lbls_to_train = [FLAGS.train_p_t, FLAGS.train_p_z,
+                         FLAGS.train_entry_x, FLAGS.train_entry_y, FLAGS.train_entry_z,
+                         FLAGS.train_vert_x, FLAGS.train_vert_y, FLAGS.train_vert_z,
+                         FLAGS.train_n_turns ]
+        print("Labels to train:",lbls_to_train)
+
         # Create placeholder images
         image_shape = [FLAGS.batch_size] + comet_dnn_input.IMAGE_SHAPE
         batch_images = tf.placeholder(tf.float32,
@@ -96,6 +107,7 @@ def train(training_files, testing_files):
                 seed=FLAGS.random_seed)
             train_iter = train_data.make_one_shot_iterator()
             train_images, train_labels = train_iter.get_next()
+            print(train_labels)
 
             # Get the testing dataset and reinitializable iterator
             test_data = comet_dnn_input.read_tfrecord_to_dataset(
@@ -106,7 +118,7 @@ def train(training_files, testing_files):
                 epochs=1,
                 seed=FLAGS.random_seed)
             test_iter = test_data.make_initializable_iterator()
-            test_images, test_labels = test_iter.get_next()
+            test_images, test_labels = test_iter.get_next()                    
 
         # Save images
         if (FLAGS.save_image==True):
@@ -115,7 +127,7 @@ def train(training_files, testing_files):
             tf.summary.image("test_images_q", train_images[:,:,:,:1])
             tf.summary.image("test_images_t", train_images[:,:,:,1:])
 
-        # Build a Graph that computes the regresses the values from the images
+        # Build a Graph that the regresses the values from the images
         predictions = comet_dnn.inference(batch_images)
         # Calculate loss using the labels
         loss = comet_dnn.loss(predictions, batch_labels)
@@ -165,9 +177,18 @@ def train(training_files, testing_files):
                 try:
                     # Get the start time
                     start_time = time.time()
-                    # Define the information for this train_feed
+                    # Prepare information for this train_feed
+                    evaluated_train_labels = train_labels.eval()
+                    # Move columns of desired predictions to front of labels array
+                    col_i = 0
+                    for lbl_i in range(len(lbls_to_train)):
+                        if lbls_to_train[lbl_i]:
+                            evaluated_train_labels[:,col_i] = evaluated_train_labels[:,lbl_i]
+                            col_i += 1
+                    # Define final train_feed
                     train_feed = {batch_images : train_images.eval(),
-                                  batch_labels : train_labels.eval()}
+                                  batch_labels : evaluated_train_labels}
+
                     # Run the session--this line does all the heavy computing
                     _, train_pred, train_loss = sess.run([train_op, predictions, loss],
                                                          feed_dict=train_feed)
@@ -183,6 +204,7 @@ def train(training_files, testing_files):
                               "First row predi: " , train_pred[0], "\n",
                               "----------------", "\n")
                     sec_per_batch = time.time() - start_time
+
                     # Print some values to std_out
                     if step % FLAGS.summary_frequency == 0:
                         _print_summary(FLAGS.batch_size, sec_per_batch, step,
@@ -194,8 +216,8 @@ def train(training_files, testing_files):
                                               eval_n_batches : 1}
                         train_summary = sess.run(eval_loss_summary,
                                                  feed_dict=train_summary_dict)
-
                         train_summary_writer.add_summary(train_summary, step)
+
                     # Save the model checkpoint periodically.
                     if step % FLAGS.num_checkpoints_steps == 0:
                         model_name = FLAGS.train_dir+'model-ckpt'
@@ -205,6 +227,7 @@ def train(training_files, testing_files):
                         builder.save() # save full model
                     if FLAGS.max_steps is not None and step > FLAGS.max_steps:
                         keep_running = False
+
                     # Evaluate the testing sample
                     if (FLAGS.evaluation_frequency is not None) and \
                        (step % FLAGS.evaluation_frequency == 0):
@@ -216,8 +239,17 @@ def train(training_files, testing_files):
                         keep_testing = True
                         while keep_testing:
                             try:
+                                # Prepare information for this test_feed
+                                evaluated_test_labels = test_labels.eval()
+                                # Move columns of desired predictions to front of labels array
+                                col_i = 0
+                                for lbl_i in range(len(lbls_to_train)):
+                                    if lbls_to_train[lbl_i]:
+                                        evaluated_train_labels[:,col_i] = evaluated_train_labels[:,lbl_i]
+                                        col_i += 1
+                                # Define final train_feed
                                 test_feed = {batch_images : test_images.eval(),
-                                             batch_labels : test_labels.eval()}
+                                             batch_labels : evaluated_test_labels}
                                 test_loss = sess.run(loss, feed_dict=test_feed)
                                 epoch_test_loss += test_loss
                                 test_step += 1
@@ -229,12 +261,14 @@ def train(training_files, testing_files):
                                                888888.8,
                                                epoch_test_loss/test_step)
                                 keep_testing = False
+
                         # Feed the summary dictionary the values
                         test_summary_dict = {eval_loss : epoch_test_loss,
                                              eval_n_batches : test_step}
                         test_summmary = sess.run(eval_loss_summary,
                                                  feed_dict=test_summary_dict)
                         test_summary_writer.add_summary(test_summmary, step)
+
                 # Stop the training loop if we reach the end of the training loop
                 except tf.errors.OutOfRangeError:
                     checkpoint_path = os.path.join(FLAGS.train_dir, 'model-ckpt')

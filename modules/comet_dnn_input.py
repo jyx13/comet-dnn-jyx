@@ -38,6 +38,26 @@ tf.app.flags.DEFINE_integer('random_seed', None,
                                randomization of the train/test splitting and
                                input shuffling.  Defaults to random number from
                                [0, max uint64)""")
+# For choosing  arbitrary set of labels to train on (T/F decided using integer)
+# If all are 0, labels are trained in order up to num_classes
+tf.app.flags.DEFINE_integer("train_p_t", 0,
+                            """Whether to train on p_t""")
+tf.app.flags.DEFINE_integer("train_p_z", 0,
+                            """Whether to train on p_z""")
+tf.app.flags.DEFINE_integer("train_entry_x", 0,
+                            """Whether to train on entry_x""")
+tf.app.flags.DEFINE_integer("train_entry_y", 0,
+                            """Whether to train on entry_y""")
+tf.app.flags.DEFINE_integer("train_entry_z", 0,
+                            """Whether to train on entry_z""")
+tf.app.flags.DEFINE_integer("train_vert_x", 0,
+                            """Whether to train on vert_x""")
+tf.app.flags.DEFINE_integer("train_vert_y", 0,
+                            """Whether to train on vert_y""")
+tf.app.flags.DEFINE_integer("train_vert_z", 0,
+                            """Whether to train on vert_z""")
+tf.app.flags.DEFINE_integer("train_n_turns", 0,
+                            """Whether to train on n_turns""")
 
 # Global constants describing the comet_dnn data set.
 EXAMPLES_PER_FILE = 5000

@@ -121,16 +121,34 @@ def eval_plots(compiled_true_labels, compiled_predicted_labels, ckpt_num):
     # 1. custom x-axis limits and binning for histograms (probably want to customize depending on which label)
     # 2. re-scale labels back into natural units (un-normalizing)
 
+    # Compile which labels were trained for
+    lbls_trained_for = [FLAGS.train_p_t, FLAGS.train_p_z,
+                        FLAGS.train_entry_x, FLAGS.train_entry_y, FLAGS.train_entry_z,
+                        FLAGS.train_vert_x, FLAGS.train_vert_y, FLAGS.train_vert_z,
+                        FLAGS.train_n_turns ]
+    print("Labels trained for:",lbls_trained_for)
+
     LABEL_NAMES = ["p_t", "p_z",
-               "entry_x", "entry_y", "entry_z",
-               "vert_x", "vert_y", "vert_z",
-               "n_turns"]
+                   "entry_x", "entry_y", "entry_z",
+                   "vert_x", "vert_y", "vert_z",
+                   "n_turns"]
+
+    print(LABEL_NAMES)
+    # to avoid getting error in case lbls_trained_for is all 0s, re-order LABEL_NAMES instead of using new var
+    # (same re-ordering technique as in train.py)
+    i = 0
+    for j in range(len(lbls_trained_for)):
+        if lbls_trained_for[j]:
+            LABEL_NAMES[i] = LABEL_NAMES[j]
+            i += 1
+
+    print(LABEL_NAMES)
 
     LABEL_LIMS = [] # to be filled in with suitable values for each label
     LABEL_NORMALIZE = [110.0, 155.,
-                   110., 115., 125.,
-                   22., 22., 85.,
-                   5.] # remember to update this if the one in comet_dnn_inputs.py is changed
+                       110., 115., 125.,
+                       22., 22., 85.,
+                       5.] # remember to update this if the one in comet_dnn_inputs.py is changed
 
     n = 5 # number of plots; used to prevent figure overlapping, also makes it easier to add new plots
 
@@ -304,7 +322,7 @@ def main(argv=None):  # pylint: disable=unused-argument
                                                        FLAGS.percent_test,
                                                        FLAGS.random_seed)
 
-    # Create a name for the train and test dirs
+    # Figure out where saver and savedmodel checkpoint files, using same format defined in train.py
     if FLAGS.saver_ckpt_dir is None:
         FLAGS.saver_ckpt_dir = FLAGS.model_dir + "/train/"
     if FLAGS.saved_model_dir is None:

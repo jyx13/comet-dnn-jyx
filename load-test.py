@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import sys
-sys.path.append('/Users/Jyx/Desktop/comet_stuff/comet_dnn/modules')
+sys.path.append('/Users/Jyx/Desktop/comet_stuff/comet-dnn-jyx/modules')
 import comet_dnn
 import comet_dnn_input
 import comet_dnn_train
@@ -15,8 +15,8 @@ from read_tfrecord import read_tfrecord_to_array
 
 print("COMET-DNN modules successfully imported")
 
-meta_file = '/Users/Jyx/Desktop/comet_stuff/20180704/0001/00000001/train/model.ckpt-8919.meta' # FILENAME of meta file
-ckpt_path = '/Users/Jyx/Desktop/comet_stuff/20180704/0001/00000001/train/' # DIRECTORY where checkpoint file is
+meta_file = '/Users/Jyx/Desktop/comet_stuff/trained_models/20180704/0001/00000001/train/model.ckpt-8919.meta' # FILENAME of meta file
+ckpt_path = '/Users/Jyx/Desktop/comet_stuff/trained_models/20180704/0001/00000001/train/' # DIRECTORY where checkpoint file is
 
 filename = '/Users/Jyx/Desktop/comet_stuff/input/oa_xx_xxx_09010000-0000_xerynzb6emaf_user-TrkTree_000_500signal-label.tfrecord' # file to make inference on, one file = 256 examples by default
 filenames = list(filename)
