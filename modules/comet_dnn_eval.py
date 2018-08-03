@@ -117,10 +117,6 @@ def eval_plots(compiled_true_labels, compiled_predicted_labels, ckpt_num):
     # INPUTS: both have dimensions of batch_size rows by num_classes columns (ckpt_num for title purposes)
     # OUTPUTS: five plots per label
                
-    # To improve:
-    # 1. custom x-axis limits and binning for histograms (probably want to customize depending on which label)
-    # 2. re-scale labels back into natural units (un-normalizing)
-
     # Compile which labels were trained for
     lbls_trained_for = [FLAGS.train_p_t, FLAGS.train_p_z,
                         FLAGS.train_entry_x, FLAGS.train_entry_y, FLAGS.train_entry_z,
@@ -134,23 +130,24 @@ def eval_plots(compiled_true_labels, compiled_predicted_labels, ckpt_num):
                    "n_turns"]
 
     # to avoid getting error in case lbls_trained_for is all 0s, re-order LABEL_NAMES instead of using new var
-    # (same re-ordering technique as in train.py)
-    # also have to re-order true label values array before plotting
     i = 0
     for j in range(len(lbls_trained_for)):
         if lbls_trained_for[j]:
             LABEL_NAMES[i] = LABEL_NAMES[j]
             i += 1
-
     print(LABEL_NAMES[:FLAGS.num_classes])
 
-    LABEL_LIMS = [] # to be filled in with suitable values for each label
-    LABEL_NORMALIZE = [110.0, 155.,
+    # To do:
+    # 1. custom x-axis limits and binning for histograms (probably want to customize depending on which label)
+    # 2. re-scale labels back into natural units (un-normalizing)
+    LABEL_LIMS = [] # to be filled in with suitable values for each label (not yet implemented)
+    LABEL_NORMALIZE = [110.0, 155., # to un-normalize axes, if desired (not yet implemented)
                        110., 115., 125.,
                        22., 22., 85.,
                        5.] # remember to update this if the one in comet_dnn_inputs.py is changed
 
     n = 5 # number of plots; used to prevent figure overlapping, also makes it easier to add new plots
+    # as long as n is at least as large as number of plots coded for, then no overlap issues
 
     # Get residuals (same dimensions as label arrays)
     compiled_residuals = compiled_true_labels - compiled_predicted_labels
@@ -214,12 +211,11 @@ def evaluate(eval_files):
 
     ckpt_num = FLAGS.checkpoint_num # string (for filepath concat)
 
-    # Compile which labels will be trained for                                                                                                          
+    # Compile which labels were trained for
     lbls_trained_for = [FLAGS.train_p_t, FLAGS.train_p_z,
                      FLAGS.train_entry_x, FLAGS.train_entry_y, FLAGS.train_entry_z,
                      FLAGS.train_vert_x, FLAGS.train_vert_y, FLAGS.train_vert_z,
                      FLAGS.train_n_turns ]
-    print("Labels trained for:",lbls_trained_for)
 
     # for Saver
     ckpt_name = FLAGS.saver_ckpt_dir + 'model-ckpt-' + ckpt_num # full path to checkpoint PREFIX (no file extensions)  
@@ -281,9 +277,9 @@ def evaluate(eval_files):
 #                print(op)
 #            print(graph.get_tensor_by_name("predictions/predictions:0"))
 
-            # Get desired true labels
+            # Get all true labels
             all_true_labels = true_labels.eval() # turn tensor into array
-            # Move columns of predicted true labels to front of array                                                              
+            # Move columns of predicted/desired true labels to front of array                                                              
             col_i = 0
             for lbl_i in range(len(lbls_trained_for)):
                 if lbls_trained_for[lbl_i]:
