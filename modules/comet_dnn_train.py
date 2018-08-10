@@ -172,8 +172,8 @@ def train(training_files, testing_files):
             while keep_running:
                 # Increment the step number
                 step += 1
-#                if step == 5: # just for testing purposes, to interrupt training after some number of steps
-#                    keep_running = False
+                if step == 1: # just for testing purposes, to interrupt training after some number of steps
+                    keep_running = False
                 try:
                     # Get the start time
                     start_time = time.time()
@@ -185,6 +185,7 @@ def train(training_files, testing_files):
                         if lbls_to_train[lbl_i]:
                             evaluated_train_labels[:,col_i] = evaluated_train_labels[:,lbl_i]
                             col_i += 1
+
                     # Define final train_feed
                     train_feed = {batch_images : train_images.eval(),
                                   batch_labels : evaluated_train_labels}
@@ -192,6 +193,11 @@ def train(training_files, testing_files):
                     # Run the session--this line does all the heavy computing
                     _, train_pred, train_loss = sess.run([train_op, predictions, loss],
                                                          feed_dict=train_feed)
+
+                    graph = tf.get_default_graph()
+                    #for op in graph.get_operations():
+                    #    print(op.name)
+                    print(graph.get_tensor_by_name("conv1/weights:0").eval())
 
                     # Debug train_feed, print only first element of labels
                     if(FLAGS.debug_mode==True):
@@ -245,9 +251,9 @@ def train(training_files, testing_files):
                                 col_i = 0
                                 for lbl_i in range(len(lbls_to_train)):
                                     if lbls_to_train[lbl_i]:
-                                        evaluated_train_labels[:,col_i] = evaluated_train_labels[:,lbl_i]
+                                        evaluated_test_labels[:,col_i] = evaluated_test_labels[:,lbl_i]
                                         col_i += 1
-                                # Define final train_feed
+                                # Define final TRAIN_feed
                                 test_feed = {batch_images : test_images.eval(),
                                              batch_labels : evaluated_test_labels}
                                 test_loss = sess.run(loss, feed_dict=test_feed)

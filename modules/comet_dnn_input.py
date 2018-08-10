@@ -18,6 +18,8 @@ import tensorflow as tf
 IMAGE_SHAPE = [18, 300, 2]
 LABEL_SHAPE = [9]
 
+FLAGS = tf.app.flags.FLAGS
+
 # Input flags
 tf.app.flags.DEFINE_string('input_list', None,
                            """A list contains all paths of .tfrecords""")
@@ -81,7 +83,6 @@ LABEL_NORMALIZE = [110.0, 155.,
                    110., 115., 125.,
                    22., 22., 85.,
                    5.]
-
 
 def write_list_to_file(a_list, filename):
     """
@@ -209,6 +210,20 @@ def train_test_split_filenames(filelist_path,
     return list(training_files), list(testing_files)
 
 def parse_record_into_tensors(record):
+
+    # Compile which labels were trained for
+    lbls_to_train = [FLAGS.train_p_t, FLAGS.train_p_z,
+                        FLAGS.train_entry_x, FLAGS.train_entry_y, FLAGS.train_entry_z,
+                        FLAGS.train_vert_x, FLAGS.train_vert_y, FLAGS.train_vert_z,
+                        FLAGS.train_n_turns ]
+    # Re-order label names for correct summary saving names
+    i = 0
+    for j in range(len(lbls_to_train)):
+        if lbls_to_train[j]:
+            LABEL_NAMES[i] = LABEL_NAMES[j]
+            i += 1
+    print(LABEL_NAMES[:FLAGS.num_classes])
+
     # Decode the features in the dataset
     features = {'image': tf.FixedLenFeature([], tf.string)}
     for name in LABEL_NAMES:

@@ -124,7 +124,8 @@ def _variable_with_weight_decay(name, shape, stddev, w_decay):
     var = _variable_on_cpu(
         name,
         shape,
-        tf.truncated_normal_initializer(stddev=stddev, dtype=dtype, seed=FLAGS.random_seed))
+        tf.contrib.layers.xavier_initializer(uniform=True, seed=FLAGS.random_seed, dtype=tf.float32))
+        # truncated_normal_initializer(stddev=stddev, dtype=dtype, seed=FLAGS.random_seed))
     if w_decay is not None:
         weight_decay = tf.multiply(tf.nn.l2_loss(var), w_decay,
                                    name='weight_loss')
@@ -176,7 +177,7 @@ def add_conv_lay(images, conv_shape, pool_shape, pool_strides,
     pool, norm :
         Output images of pooling layers
     """
-    with tf.variable_scope("conv"+layer_name) as scope:
+    with tf.variable_scope("conv"+layer_name, reuse=tf.AUTO_REUSE) as scope:
         # Initialize or get the kernel
         kernel = _variable_with_weight_decay(kernel_name,
                                              shape=conv_shape,
@@ -234,7 +235,7 @@ def inference(images):
                          layer_name="2")
 
     # fully_connected1
-    with tf.variable_scope('fully_connected1') as scope:
+    with tf.variable_scope('fully_connected1', reuse=tf.AUTO_REUSE) as scope:
         # Move everything into depth so we can perform a single matrix multiply.
         reshape = tf.reshape(conv2, [images.get_shape().as_list()[0], -1])
         dim = reshape.get_shape()[1].value
@@ -246,7 +247,7 @@ def inference(images):
         _activation_summary(fully_connected1)
 
     # fully_connected2
-    with tf.variable_scope('fully_connected2') as scope:
+    with tf.variable_scope('fully_connected2',  reuse=tf.AUTO_REUSE) as scope:
         weights = _variable_with_weight_decay('weights', shape=[FLAGS.num_fc_nodes, FLAGS.num_fc_nodes/2],
                                               stddev=FLAGS.weight_stddev, w_decay=FLAGS.weight_decay)
         biases = _variable_on_cpu('biases', [FLAGS.num_fc_nodes/2], tf.constant_initializer(0.1))
